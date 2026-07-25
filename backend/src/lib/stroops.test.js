@@ -52,6 +52,29 @@ describe('usdcToStroops', () => {
     expect(() => usdcToStroops('Infinity')).toThrow('Invalid USDC amount');
   });
 
+  it('handles exponent notation strings', () => {
+    expect(usdcToStroops('1e-7')).toBe(1n);
+    expect(usdcToStroops('1e-6')).toBe(10n);
+    expect(usdcToStroops('1e-3')).toBe(10000n);
+    expect(usdcToStroops('1e2')).toBe(1000000000n);
+    expect(usdcToStroops('2.5e2')).toBe(2500000000n);
+  });
+
+  it('handles exponent notation numbers', () => {
+    expect(usdcToStroops(1e-7)).toBe(1n);
+    expect(usdcToStroops(1e-6)).toBe(10n);
+    expect(usdcToStroops(1e-3)).toBe(10000n);
+    expect(usdcToStroops(1e2)).toBe(1000000000n);
+  });
+
+  it('rejects hex, binary, and octal notation', () => {
+    expect(() => usdcToStroops('0x1')).toThrow('Invalid USDC amount');
+    expect(() => usdcToStroops('0X1')).toThrow('Invalid USDC amount');
+    expect(() => usdcToStroops('0b1')).toThrow('Invalid USDC amount');
+    expect(() => usdcToStroops('0o1')).toThrow('Invalid USDC amount');
+    expect(() => usdcToStroops('007')).toThrow('Invalid USDC amount');
+  });
+
   it('handles negative amounts', () => {
     expect(usdcToStroops('-1')).toBe(-10000000n);
     expect(usdcToStroops('-0.001')).toBe(-10000n);

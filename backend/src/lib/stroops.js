@@ -22,13 +22,24 @@ export function usdcToStroops(usdc) {
     throw new Error(`Invalid USDC amount: "${usdc}"`);
   }
 
+  // Reject hex, binary, octal, or other non-decimal notations before Number()
+  if (/^(0[xXbBoO]|0\d)/.test(str)) {
+    throw new Error(`Invalid USDC amount: "${usdc}"`);
+  }
+
   const num = Number(str);
   if (!Number.isFinite(num)) {
     throw new Error(`Invalid USDC amount: "${usdc}"`);
   }
 
+  // Normalize exponent notation (e.g. "1e-7" → "0.0000001") via toPrecision
+  // so the raw string can be safely split on '.'
+  const normalized = Math.abs(num) < 1 && num !== 0
+    ? num.toFixed(20).replace(/0+$/, '').replace(/\.$/, '')
+    : String(num);
+
   // Split into integer and fractional parts for exact string arithmetic
-  const [intPart, fracPart = ''] = str.replace(/^[+-]/, '').split('.');
+  const [intPart, fracPart = ''] = normalized.replace(/^[+-]/, '').split('.');
 
   // Pad or truncate fractional part to exactly 7 digits (stroops precision)
   const frac = fracPart.padEnd(7, '0').slice(0, 7);
@@ -39,7 +50,7 @@ export function usdcToStroops(usdc) {
   const stroops = BigInt(intClean + frac);
 
   // Preserve sign for negative amounts (rare but defensive)
-  if (str.startsWith('-')) {
+  if (normalized.startsWith('-')) {
     return -stroops;
   }
   return stroops;

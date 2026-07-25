@@ -366,11 +366,18 @@ router.post(
       return res.status(400).json({ error: '`serviceId` is required', code: 'INVALID_BODY' });
     }
 
-    // ── 5. Reserve the key before touching the chain ──────────────────────────
+    // ── 5. Validate amount before reserving the idempotency key ──────────────
+    let amountStroops;
+    try {
+      amountStroops = usdcToStroops(amountUsdc);
+    } catch {
+      return res.status(400).json({ error: `Invalid amountUsdc: "${amountUsdc}"`, code: 'INVALID_BODY' });
+    }
+
+    // ── 6. Reserve the key before touching the chain ──────────────────────────
     markPending(scopedKey);
 
     try {
-      const amountStroops = usdcToStroops(amountUsdc);
       await recordPaymentOnChain(address, serviceId, amountStroops, success);
       const agent = await getAgent(address);
       const newScore = agent?.score ?? 0;
