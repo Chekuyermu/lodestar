@@ -83,7 +83,12 @@ router.post('/demo-run', async (req, res) => {
     const httpClient = buildHttpClient();
     const activityCountBefore = getActivityFeed().length;
 
-    const { response, txHash: fetchedTxHash } = await httpClient.fetchWithTx(finalEndpointUrl);
+    const abortController = new AbortController();
+    const onClose = () => abortController.abort();
+    req.on('close', onClose);
+
+    const { response, txHash: fetchedTxHash } = await httpClient.fetchWithTx(finalEndpointUrl, { signal: abortController.signal });
+    req.removeListener('close', onClose);
 
     if (!response.ok) {
       throw new Error(`Service responded with ${response.status}`);
@@ -116,6 +121,10 @@ router.post('/demo-run', async (req, res) => {
     logger.info({ serviceId, category, txHash }, 'Demo run complete');
     res.json({ data, txHash });
   } catch (err) {
+    if (err.name === 'AbortError') {
+      logger.info({ serviceId: req.body?.serviceId, category: req.body?.category }, 'Demo run aborted by client');
+      return res.status(499).json({ error: 'Request cancelled', code: 'CANCELLED' });
+    }
     logger.error({ err }, 'POST /api/demo-run failed');
     res.status(500).json({ error: err instanceof Error ? err.message : 'Demo run failed', code: 'DEMO_ERROR' });
   }
