@@ -61,6 +61,9 @@ export default function AgentDemo() {
     setResult(null);
     setError('');
 
+    // Hoisted so the catch block can reference it for negative reputation votes.
+    let best: { id: number; name: string; endpoint: string; price_usdc: string; reputation: number } | undefined;
+
     try {
       // Step 1 — query registry
       pushStep('Querying Lodestar registry…', 'active');
@@ -80,7 +83,7 @@ export default function AgentDemo() {
       pushStep(`Found ${services.length} matching service${services.length > 1 ? 's' : ''}`, 'complete');
 
       // Step 3 — select best
-      const best = [...services].sort((a, b) => b.reputation - a.reputation)[0];
+      best = [...services].sort((a, b) => b.reputation - a.reputation)[0];
       pushStep(`Selected "${best.name}" at $${best.price_usdc} USDC`, 'complete');
 
       // Step 4 — send payment
@@ -99,7 +102,36 @@ export default function AgentDemo() {
         throw new Error(errBody.error ?? 'Demo request failed');
       }
 
-      const demoData = (await demoRes.json()) as { data: unknown; txHash: string };
+      const demoData = (await demoRes.json()) as { data: unknown; txHash: string; dataValid: boolean };
+
+      // Gate on the data-quality flag surfaced by the backend.
+      // A missing flag (older backend) is treated as valid to stay backwards-compatible.
+      const dataValid = demoData.dataValid !== false;
+
+      if (!dataValid) {
+        // Payment went through but the service returned empty or error data —
+        // mark the step as an error and penalise reputation.
+        setSteps((prev) => {
+          const next = [...prev];
+          const last = next[next.length - 1];
+          if (last && last.status === 'active') {
+            next[next.length - 1] = { ...last, status: 'error' };
+          }
+          return next;
+        });
+        pushStep('Service returned invalid data', 'error');
+        setError('The service returned empty or invalid data.');
+
+        if (DEMO_AGENT_ADDRESS) {
+          await fetch(`${API_URL}/api/reputation/${best.id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ positive: false, agent: DEMO_AGENT_ADDRESS }),
+          }).catch(() => {});
+        }
+        return;
+      }
+
       completeLastStep();
 
       // Step 5 — confirmed
@@ -112,9 +144,9 @@ export default function AgentDemo() {
         price: best.price_usdc,
       });
 
-      // Update reputation positively, signed on-chain as the demo agent.
-      // Best-effort: a missing agent config or the on-chain cooldown shouldn't
-      // fail the demo run that already succeeded.
+      // Update reputation based on verified data quality, signed on-chain as the
+      // demo agent. Best-effort: a missing agent config or the on-chain cooldown
+      // shouldn't fail the demo run that already succeeded.
       if (DEMO_AGENT_ADDRESS) {
         await fetch(`${API_URL}/api/reputation/${best.id}`, {
           method: 'POST',
@@ -132,6 +164,16 @@ export default function AgentDemo() {
         }
         return next;
       });
+
+      // Penalise reputation for hard failures (network error, non-2xx response,
+      // payment error). Best-effort — swallow any reputation submission errors.
+      if (DEMO_AGENT_ADDRESS && best) {
+        await fetch(`${API_URL}/api/reputation/${best.id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ positive: false, agent: DEMO_AGENT_ADDRESS }),
+        }).catch(() => {});
+      }
     } finally {
       setRunning(false);
     }
