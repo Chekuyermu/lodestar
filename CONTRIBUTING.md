@@ -38,7 +38,9 @@ All of the above run automatically on every PR and push to `main` via GitHub Act
 
 ## Code style
 
-- Rust: run `cargo fmt` before committing; `cargo fmt --all --check` runs in CI under the `contract-build` job
+- We use Husky and `lint-staged` to automatically run Prettier, ESLint, and `cargo fmt` on staged files before every commit.
+- In an emergency, you can skip these hooks by passing `--no-verify` to your git commit command: `git commit --no-verify -m "..."`.
+- Rust: `cargo fmt --all --check` runs in CI under the `contract-build` job
 - JS/TS: follow the existing ESLint and TypeScript configuration in each package (JS lint CI steps are a planned follow-up)
 
 ## Submitting a pull request
