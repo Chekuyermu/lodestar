@@ -66,11 +66,12 @@ function parsePositiveSafeInteger(value) {
 // is unavailable so callers can always treat absence as "no warning data".
 router.get("/services", async (req, res) => {
   try {
-    const { category, q, page: pageStr } = req.query;
-    const page = Math.max(0, parseInt(pageStr, 10) || 0);
+    const { category, q, offset: offsetStr, limit: limitStr } = req.query;
+    const offset = Math.max(0, parseInt(offsetStr, 10) || 0);
+    const limit = Math.min(50, Math.max(1, parseInt(limitStr, 10) || PAGE_SIZE));
 
     const [servicesResult, ledgerResult] = await Promise.allSettled([
-      listServices({ category: category || undefined, page, pageSize: PAGE_SIZE }),
+      listServices({ category: category || undefined, offset, limit }),
       getCurrentLedgerSequence(),
     ]);
 
@@ -240,7 +241,7 @@ router.get("/stats", async (req, res) => {
     const totalPages = Math.ceil(totalServices / PAGE_SIZE);
     let allServices = [];
     for (let i = 0; i < totalPages; i++) {
-      const page = await listServices({ page: i, pageSize: PAGE_SIZE });
+      const page = await listServices({ offset: i * PAGE_SIZE, limit: PAGE_SIZE });
       allServices.push(...page);
     }
 
