@@ -2,6 +2,10 @@ import express from "express";
 import cors from "cors";
 import config, { validateConfig } from "./config.js";
 import logger from "./lib/logger.js";
+import {
+  requestLogger,
+  requestContextMiddleware,
+} from "./middleware/requestContext.js";
 import { checkRpcHealth } from "./lib/stellar.js";
 import {
   getSubmitQueueDepth,
@@ -53,10 +57,13 @@ const app = express();
 // rate limiting. Defaults to false (no proxy) to avoid X-Forwarded-For spoofing.
 app.set("trust proxy", config.trustProxy);
 
+app.use(requestLogger);
+app.use(requestContextMiddleware);
+
 app.use(cors({ origin: config.corsOrigin, credentials: true }));
 app.use(express.json({ limit: config.jsonBodyLimit }));
 
-app.get("/healthz", async (_req, res) => {
+app.get("/healthz", async (req, res) => {
   try {
     const health = await checkRpcHealth();
     const queueDepth = getSubmitQueueDepth();
@@ -81,7 +88,7 @@ app.get("/healthz", async (_req, res) => {
       ...(health.error && { error: health.error }),
     });
   } catch (err) {
-    logger.error({ err }, "Health check failed");
+    req.log.error({ err }, "Health check failed");
     res.status(503).json({
       status: "unhealthy",
       error: "Health check failed",
@@ -95,16 +102,16 @@ app.use("/api", agentsRouter);
 app.use("/api", demoRouter);
 app.use("/demo", servicesRouter);
 
-app.use((err, _req, res, _next) => {
+app.use((err, req, res, _next) => {
   if (err.type === "entity.too.large") {
-    logger.warn({ expected: config.jsonBodyLimit }, "Request body too large");
+    req.log.warn({ expected: config.jsonBodyLimit }, "Request body too large");
     return res.status(413).json({
       error: `Request body too large. Maximum size is ${config.jsonBodyLimit}.`,
       code: "PAYLOAD_TOO_LARGE",
     });
   }
 
-  logger.error({ err }, "Unhandled error");
+  req.log.error({ err }, "Unhandled error");
   res.status(500).json({
     error: "Internal server error",
     code: "INTERNAL_ERROR",
