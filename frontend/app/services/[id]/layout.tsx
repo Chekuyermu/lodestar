@@ -11,7 +11,7 @@ interface Props {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const serviceId = Number(params.id);
 
-  if (!Number.isFinite(serviceId)) {
+  if (!/^\d+$/.test(params.id) || !Number.isSafeInteger(serviceId)) {
     return {
       title: 'Service Not Found',
     };
