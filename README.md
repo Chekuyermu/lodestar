@@ -314,7 +314,8 @@ Full payment history: [GAY42L…KGU3 on Stellar Explorer](https://stellar.expert
 
 ## Demo Video
 
-> Paste link here after recording.
+- [Short walkthrough of the agent run](docs/assets/demo-recording.svg) — a lightweight recording-style preview of the registry, agent scoring, and payment flow.
+- Live deployment: https://lodestar-ruddy.vercel.app
 
 ---
 
