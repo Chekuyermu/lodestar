@@ -47,7 +47,8 @@ export default function RegisterForm({ walletAddress }: Props) {
   const [form, setForm]     = useState<FormState>(EMPTY);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<{ txHash: string } | null>(null);
+  const [pendingTx, setPendingTx] = useState<{ txHash: string } | null>(null);
+  const [result, setResult] = useState<{ txHash: string; id: number } | null>(null);
   const [submitError, setSubmitError] = useState('');
 
   function set(field: keyof FormState, value: string) {
@@ -64,8 +65,12 @@ export default function RegisterForm({ walletAddress }: Props) {
     }
     setSubmitting(true);
     setSubmitError('');
+    setPendingTx(null);
     try {
       const res = await registerService(form as RegisterFormData, walletAddress);
+      setPendingTx({ txHash: res.txHash });
+      // Wait a moment to show the pending state before showing success
+      await new Promise(resolve => setTimeout(resolve, 2000));
       setResult(res);
       setForm(EMPTY);
     } catch (err) {
@@ -73,6 +78,28 @@ export default function RegisterForm({ walletAddress }: Props) {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (pendingTx) {
+    return (
+      <div className="card p-8 text-center fade-in">
+        <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
+          <div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full spinner" />
+        </div>
+        <h3 className="font-semibold text-lg mb-2">Confirming transaction</h3>
+        <p className="text-secondary text-sm mb-4">
+          Your registration is being confirmed on the network.
+        </p>
+        <a
+          href={`${EXPLORER_URL}/tx/${pendingTx.txHash}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mono text-xs text-accent break-all hover:underline"
+        >
+          {pendingTx.txHash}
+        </a>
+      </div>
+    );
   }
 
   if (result) {
@@ -114,6 +141,7 @@ export default function RegisterForm({ walletAddress }: Props) {
           value={form.name}
           onChange={(e) => set('name', e.target.value)}
           placeholder="My Weather API"
+          disabled={submitting}
           className={input(!!errors.name)}
         />
       </Field>
@@ -128,6 +156,7 @@ export default function RegisterForm({ walletAddress }: Props) {
           value={form.description}
           onChange={(e) => set('description', e.target.value)}
           placeholder="Describe what your service does and what data it returns..."
+          disabled={submitting}
           className={input(!!errors.description)}
         />
       </Field>
@@ -142,6 +171,7 @@ export default function RegisterForm({ walletAddress }: Props) {
           value={form.endpoint}
           onChange={(e) => set('endpoint', e.target.value)}
           placeholder="https://api.example.com/weather"
+          disabled={submitting}
           className={`mono ${input(!!errors.endpoint)}`}
         />
       </Field>
@@ -155,6 +185,7 @@ export default function RegisterForm({ walletAddress }: Props) {
             value={form.price_usdc}
             onChange={(e) => set('price_usdc', e.target.value)}
             placeholder="0.001"
+            disabled={submitting}
             className={`mono ${input(!!errors.price_usdc)}`}
           />
         </Field>
@@ -163,6 +194,7 @@ export default function RegisterForm({ walletAddress }: Props) {
           <select
             value={form.category}
             onChange={(e) => set('category', e.target.value as Category)}
+            disabled={submitting}
             className={input(false)}
           >
             {CATEGORIES.map((c) => (
