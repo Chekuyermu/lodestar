@@ -92,8 +92,21 @@ app.get("/healthz", async (_req, res) => {
 
 app.use("/api", registryRouter);
 app.use("/api", agentsRouter);
-app.use("/api", demoRouter);
-app.use("/demo", servicesRouter);
+
+// Demo routes are backed by server-custodied keys and should not be reachable
+// in production deployments. Gate them behind ENABLE_DEMO_ROUTES, defaulting to
+// enabled only when NODE_ENV is not "production".
+const enableDemoRoutes =
+  process.env.ENABLE_DEMO_ROUTES === 'true' ||
+  (process.env.ENABLE_DEMO_ROUTES === undefined && config.nodeEnv !== 'production');
+
+if (enableDemoRoutes) {
+  logger.info({ nodeEnv: config.nodeEnv }, 'Demo routes enabled');
+  app.use("/api", demoRouter);
+  app.use("/demo", servicesRouter);
+} else {
+  logger.info({ nodeEnv: config.nodeEnv }, 'Demo routes disabled (set ENABLE_DEMO_ROUTES=true to enable)');
+}
 
 app.use((err, _req, res, _next) => {
   if (err.type === "entity.too.large") {
