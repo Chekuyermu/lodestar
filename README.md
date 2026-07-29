@@ -5,6 +5,32 @@ Lodestar solves the missing discovery layer in the x402 agentic payments ecosyst
 
 ---
 
+## Project Status and Roadmap
+
+Lodestar is currently an early-stage, demo-ready project for the Stellar ecosystem. It is suitable for evaluation, experimentation, and contributor feedback, but it is not yet a production-grade platform for mission-critical payments or broad public deployment.
+
+### Current maturity
+- The core discovery, payment, and reputation flow is implemented and exercised in the demo app.
+- The project includes live testnet deployments for the frontend, backend API, and Soroban contracts.
+- The codebase is actively evolving and is best treated as a working prototype with room for hardening.
+
+### Deployment status
+- Frontend: https://lodestar-ruddy.vercel.app
+- Backend API: https://lodestar-8na4.onrender.com/api/services
+- Health check: https://lodestar-8na4.onrender.com/healthz
+- Registry contract: [CAKZALA72JTR6BV6N44E7L52C7QU5BAYYKVKYR2DFSV2YD2A2OI6WJMP](https://stellar.expert/explorer/testnet/contract/CAKZALA72JTR6BV6N44E7L52C7QU5BAYYKVKYR2DFSV2YD2A2OI6WJMP)
+- Agents contract: [CCT4FUTW54K7BYZFOCBEM5MVLS42ZE25WJ3ONW7RLYXAF3HQS7ZQYA2N](https://stellar.expert/explorer/testnet/contract/CCT4FUTW54K7BYZFOCBEM5MVLS42ZE25WJ3ONW7RLYXAF3HQS7ZQYA2N)
+
+### Known limitations
+- The current deployment targets Stellar testnet and is not yet a mainnet production rollout.
+- The demo experience is useful for validation, but operational hardening, monitoring, and broader real-world testing are still pending.
+- Some UX and onboarding flows are intentionally lightweight and may evolve as contributors shape the roadmap.
+
+### Roadmap
+The short-term direction is to harden the core experience, improve documentation, and expand the set of supported payment and discovery flows. Follow the GitHub milestones for ongoing priorities: https://github.com/Stellar-Ecosystem/lodestar/milestones
+
+---
+
 Lodestar ships two Soroban contracts: the **Service Registry** (discovery + reputation) and the **Agent Credit Scoring** system (identity + trust + spending policies).
 
 ---
