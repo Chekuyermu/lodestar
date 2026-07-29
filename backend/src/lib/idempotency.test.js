@@ -84,36 +84,48 @@ describe('getEntry / markPending / markComplete / markFailed', () => {
   });
 });
 
-describe('purgeExpired (background timer)', () => {
-  it('removes expired entries on purge', () => {
+describe('purgeExpired', () => {
+  it('removes expired entries on manual purge', () => {
     idempotency.markPending('old-key');
-
     vi.advanceTimersByTime(24 * 60 * 60 * 1000 + 1);
-
     idempotency.markPending('fresh-key');
-
     idempotency._purgeNow();
-
     expect(idempotency._size()).toBe(1);
     expect(idempotency.getEntry('fresh-key')).not.toBeNull();
   });
 
-  it('does not remove live entries', () => {
+  it('does not remove live entries on manual purge', () => {
     idempotency.markPending('key-1');
-
     idempotency._purgeNow();
-
     expect(idempotency._size()).toBe(1);
+  });
+
+  it('runs on the scheduled timer and removes expired entries', () => {
+    idempotency._startTimer();
+    idempotency.markPending('expire-me');
+    vi.advanceTimersByTime(24 * 60 * 60 * 1000 + 1);
+
+    vi.advanceTimersByTime(60_000);
+
+    expect(idempotency.getEntry('expire-me')).toBeNull();
+    expect(idempotency._size()).toBe(0);
+  });
+
+  it('scheduled timer does not remove live entries', () => {
+    idempotency._startTimer();
+    idempotency.markPending('keep-me');
+    vi.advanceTimersByTime(60_000);
+    expect(idempotency._size()).toBe(1);
+    expect(idempotency.getEntry('keep-me')).not.toBeNull();
   });
 });
 
 describe('_reset', () => {
   it('clears all entries and stops the timer', () => {
+    idempotency._startTimer();
     idempotency.markPending('key-1');
     expect(idempotency._size()).toBe(1);
-
     idempotency._reset();
-
     expect(idempotency._size()).toBe(0);
     expect(idempotency.getEntry('key-1')).toBeNull();
   });

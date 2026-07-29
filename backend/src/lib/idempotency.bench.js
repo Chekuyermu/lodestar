@@ -4,49 +4,81 @@ import * as idempotency from './idempotency.js';
 const COUNT = 100_000;
 const SAMPLES = 10_000;
 
+// ---------------------------------------------------------------------------
+// Phase 1 — New O(1) lookup throughput
+// ---------------------------------------------------------------------------
 idempotency._reset();
 idempotency._startTimer();
 
-// Populate store with COUNT entries
 for (let i = 0; i < COUNT; i++) {
   idempotency.markPending(`key-${i}`);
 }
 
-// Warm up
 for (let i = 0; i < 1000; i++) {
   idempotency.getEntry(`key-${i}`);
 }
 
-// Benchmark lookups
-const start = performance.now();
+const t1 = performance.now();
 for (let i = 0; i < SAMPLES; i++) {
   idempotency.getEntry(`key-${i}`);
 }
-const elapsed = performance.now() - start;
+const elapsedNew = performance.now() - t1;
 
-const avg = elapsed / SAMPLES;
-const opsPerSec = (SAMPLES / elapsed) * 1000;
-
-console.log(`\nIdempotency lookup benchmark`);
-console.log(`  Store size:   ${COUNT.toLocaleString()} entries`);
-console.log(`  Samples:      ${SAMPLES.toLocaleString()}`);
-console.log(`  Total time:   ${elapsed.toFixed(2)} ms`);
-console.log(`  Avg lookup:   ${(avg * 1e6).toFixed(2)} ns`);
-console.log(`  Throughput:   ${opsPerSec.toLocaleString(undefined, { maximumFractionDigits: 0 })} ops/sec`);
-console.log(`  Complexity:   O(1) — no full-map scan on getEntry()`);
-
-// Confirm memory is bounded: add more, ensure timer can clean
+// Verify that _purgeNow() does not remove live entries (no false expiry)
 const beforePurge = idempotency._size();
-console.log(`  Size before purge (all live): ${beforePurge}`);
+idempotency._purgeNow();
+const afterPurge = idempotency._size();
 
-// Simulate expiry by advancing internal clock is impractical here,
-// but the background timer runs with unref() — this is a runtime guarantee.
-console.log(`  Purge timer:  active & unref'd (every 60s)`);
+// ---------------------------------------------------------------------------
+// Phase 2 — Simulated old O(n) baseline (full-map purgeExpired on every read)
+// ---------------------------------------------------------------------------
+// This reproduces the exact behaviour of the pre-fix getEntry().
+const oldStore = new Map();
+for (let i = 0; i < COUNT; i++) {
+  oldStore.set(`old-${i}`, { status: 'pending', result: null, expiresAt: Date.now() + 86_400_000 });
+}
+function oldGetEntry(key) {
+  const now = Date.now();
+  for (const [k, v] of oldStore) {
+    if (v.expiresAt <= now) oldStore.delete(k);
+  }
+  return oldStore.get(key);
+}
+for (let i = 0; i < 1000; i++) {
+  oldGetEntry(`old-${i}`);
+}
+const t2 = performance.now();
+for (let i = 0; i < SAMPLES; i++) {
+  oldGetEntry(`old-${i}`);
+}
+const elapsedOld = performance.now() - t2;
+
+// ---------------------------------------------------------------------------
+// Results
+// ---------------------------------------------------------------------------
+const avgNew = elapsedNew / SAMPLES;
+const opsNew = (SAMPLES / elapsedNew) * 1000;
+const avgOld = elapsedOld / SAMPLES;
+const opsOld = (SAMPLES / elapsedOld) * 1000;
+
+console.log(`\n--- New implementation (O(1) lookup, timer-based purge) ---`);
+console.log(`  Store size:     ${COUNT.toLocaleString()} entries`);
+console.log(`  Samples:        ${SAMPLES.toLocaleString()}`);
+console.log(`  Total time:     ${elapsedNew.toFixed(2)} ms`);
+console.log(`  Avg lookup:     ${(avgNew * 1e6).toFixed(2)} ns`);
+console.log(`  Throughput:     ${opsNew.toLocaleString(undefined, { maximumFractionDigits: 0 })} ops/sec`);
+console.log(`  Purge accuracy: ${beforePurge} entries before _purgeNow, ${afterPurge} after — no false removals`);
+
+console.log(`\n--- Old implementation (O(n) full-map scan per lookup) ---`);
+console.log(`  Store size:     ${COUNT.toLocaleString()} entries`);
+console.log(`  Samples:        ${SAMPLES.toLocaleString()}`);
+console.log(`  Total time:     ${elapsedOld.toFixed(2)} ms`);
+console.log(`  Avg lookup:     ${(avgOld * 1e6).toFixed(2)} ns`);
+console.log(`  Throughput:     ${opsOld.toLocaleString(undefined, { maximumFractionDigits: 0 })} ops/sec`);
+
+console.log(`\n--- Measured speed-up ---`);
+console.log(`  Old: ${opsOld.toLocaleString(undefined, { maximumFractionDigits: 0 })} ops/sec`);
+console.log(`  New: ${opsNew.toLocaleString(undefined, { maximumFractionDigits: 0 })} ops/sec`);
+console.log(`  ${(opsNew / opsOld).toLocaleString(undefined, { maximumFractionDigits: 0 })}x measured improvement\n`);
 
 idempotency._reset();
-
-// Compute improvement factor vs old O(n) approach
-console.log(`\nComparison: old approach would scan all ${COUNT} entries per lookup`);
-console.log(`  Old: ${COUNT.toLocaleString()} checks/lookup = O(n)`);
-console.log(`  New: 1 check/lookup (Map.get + single expiry check) = O(1)`);
-console.log(`  Improvement factor: ~${COUNT.toLocaleString()}x\n`);
