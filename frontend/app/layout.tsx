@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import Navbar from '@/components/Navbar';
 import { WalletProvider } from '@/components/WalletContext';
+import { ThemeProvider } from '@/components/ThemeProvider';
 
 export const metadata: Metadata = {
   title: 'Lodestar — Navigate the agent economy',
@@ -13,13 +14,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className="bg-background text-primary">
-        <WalletProvider>
-          <Navbar />
-          <main>{children}</main>
-          <footer className="border-t border-border mt-24 py-8 text-center text-sm text-secondary">
-            Built on Stellar · Powered by x402 · Lodestar 2026
-          </footer>
-        </WalletProvider>
+        <ThemeProvider>
+          <WalletProvider>
+            <Navbar />
+            <main>{children}</main>
+            <footer className="border-t border-border mt-24 py-8 text-center text-sm text-secondary">
+              Built on Stellar · Powered by x402 · Lodestar 2026
+            </footer>
+          </WalletProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
