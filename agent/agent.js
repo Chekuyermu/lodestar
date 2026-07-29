@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
+import fs from 'node:fs';
 import pino from 'pino';
 import pkg from '@stellar/stellar-sdk';
 const { Keypair } = pkg;
@@ -10,12 +11,51 @@ import { ExactStellarScheme } from '@x402/stellar/exact/client';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const required = ['AGENT_STELLAR_SECRET', 'STELLAR_RPC_URL', 'LODESTAR_API_URL'];
+function loadSecret() {
+  const envSecret = process.env.AGENT_STELLAR_SECRET;
+  const filePath  = process.env.AGENT_STELLAR_SECRET_FILE;
+
+  if (envSecret && filePath) {
+    throw new Error('Set only one of AGENT_STELLAR_SECRET or AGENT_STELLAR_SECRET_FILE, not both');
+  }
+
+  if (filePath) {
+    let secret;
+    try {
+      secret = fs.readFileSync(filePath, 'utf8').trim();
+    } catch (err) {
+      throw new Error(`Failed to read AGENT_STELLAR_SECRET_FILE: ${err.message}`);
+    }
+
+    if (process.platform !== 'win32') {
+      const mode = fs.statSync(filePath).mode;
+      const groupRead = !!(mode & 0o040);
+      const otherRead = !!(mode & 0o004);
+      if (groupRead || otherRead) {
+        throw new Error(
+          `AGENT_STELLAR_SECRET_FILE at ${filePath} is group/world readable. ` +
+          `Run: chmod 600 ${filePath}`
+        );
+      }
+    }
+
+    return secret;
+  }
+
+  if (envSecret) {
+    return envSecret;
+  }
+
+  throw new Error('Missing AGENT_STELLAR_SECRET or AGENT_STELLAR_SECRET_FILE');
+}
+
+let AGENT_SECRET = loadSecret();
+
+const required = ['STELLAR_RPC_URL', 'LODESTAR_API_URL'];
 for (const key of required) {
   if (!process.env[key]) throw new Error(`Missing required env var: ${key}`);
 }
 
-const AGENT_SECRET         = process.env.AGENT_STELLAR_SECRET;
 const RPC_URL              = process.env.STELLAR_RPC_URL;
 const LODESTAR_API_URL     = process.env.LODESTAR_API_URL;
 const LODESTAR_HMAC_SECRET = process.env.LODESTAR_HMAC_SECRET ?? '';
@@ -35,6 +75,11 @@ try {
   throw new Error(`Invalid AGENT_STELLAR_SECRET: unable to parse secret key`);
 }
 const AGENT_ADDRESS = agentKeypair.publicKey();
+
+// Zero the in-memory secret reference after key derivation.
+// JS strings are immutable, so this does not scrub the original bytes
+// from the heap, but removes the long-lived reference from this scope.
+AGENT_SECRET = undefined;
 
 const logger = pino({
   level: process.env.LOG_LEVEL ?? 'info',
@@ -186,7 +231,10 @@ function usdcStrToStroops(usdcStr) {
 }
 
 function buildHttpClient() {
-  const signer = createEd25519Signer(AGENT_SECRET, 'stellar:testnet');
+  // Re-read the secret for the x402 signer since the module-level reference
+  // has already been zeroed. loadSecret() re-reads from the env var or file.
+  const secretForSigner = loadSecret();
+  const signer = createEd25519Signer(secretForSigner, 'stellar:testnet');
   const scheme = new ExactStellarScheme(signer, { url: RPC_URL });
   const x402 = new x402Client().register('stellar:*', scheme);
   const httpClient = new x402HTTPClient(x402);
