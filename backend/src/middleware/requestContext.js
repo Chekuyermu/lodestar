@@ -12,14 +12,18 @@ function getRequestId(req) {
   return randomUUID();
 }
 
-export const requestLogger = pinoHttp({
-  logger,
-  genReqId(req, res) {
-    const requestId = getRequestId(req);
-    res.setHeader('X-Request-Id', requestId);
-    return requestId;
-  },
-});
+export function createRequestLogger(baseLogger = logger) {
+  return pinoHttp({
+    logger: baseLogger,
+    genReqId(req, res) {
+      const requestId = getRequestId(req);
+      res.setHeader('X-Request-Id', requestId);
+      return requestId;
+    },
+  });
+}
+
+export const requestLogger = createRequestLogger();
 
 export function requestContextMiddleware(req, res, next) {
   const requestId = req.id;

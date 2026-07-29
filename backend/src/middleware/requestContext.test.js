@@ -1,16 +1,36 @@
+import { Writable } from 'node:stream';
 import express from 'express';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
-import logger from '../lib/logger.js';
+import logger, { createLogger } from '../lib/logger.js';
 import {
   requestLogger,
+  createRequestLogger,
   requestContextMiddleware,
 } from './requestContext.js';
 
-function createApp() {
+function createLogCapture() {
+  const logs = [];
+  const destination = new Writable({
+    write(chunk, _encoding, callback) {
+      logs.push(JSON.parse(chunk.toString()));
+      callback();
+    },
+  });
+
+  return {
+    logs,
+    logger: createLogger(destination),
+  };
+}
+
+function createApp({
+  appLogger = logger,
+  httpLogger = requestLogger,
+} = {}) {
   const app = express();
 
-  app.use(requestLogger);
+  app.use(httpLogger);
   app.use(requestContextMiddleware);
   app.use(express.json());
 
@@ -23,7 +43,7 @@ function createApp() {
   });
 
   app.get('/global-log', (_req, res) => {
-    logger.info('Global logger inside request context');
+    appLogger.info('Global logger inside request context');
     res.json({ success: true });
   });
 
@@ -88,12 +108,46 @@ describe('request correlation middleware', () => {
     expect(response.headers['x-request-id']).toBe('header-id');
   });
 
-  it('allows the global logger to run inside the request context', async () => {
-    const response = await request(createApp())
+  it('adds the request ID to req.log output', async () => {
+    const capture = createLogCapture();
+    const app = createApp({
+      appLogger: capture.logger,
+      httpLogger: createRequestLogger(capture.logger),
+    });
+
+    const response = await request(app)
+      .get('/success')
+      .set('X-Request-Id', 'request-log-request');
+
+    expect(response.status).toBe(200);
+    expect(
+      capture.logs.some(
+        (entry) =>
+          entry.msg === 'Successful correlated request' &&
+          entry.requestId === 'request-log-request',
+      ),
+    ).toBe(true);
+  });
+
+  it('adds the request ID to global logger output', async () => {
+    const capture = createLogCapture();
+    const app = createApp({
+      appLogger: capture.logger,
+      httpLogger: createRequestLogger(capture.logger),
+    });
+
+    const response = await request(app)
       .get('/global-log')
       .set('X-Request-Id', 'global-log-request');
 
     expect(response.status).toBe(200);
     expect(response.headers['x-request-id']).toBe('global-log-request');
+    expect(
+      capture.logs.some(
+        (entry) =>
+          entry.msg === 'Global logger inside request context' &&
+          entry.requestId === 'global-log-request',
+      ),
+    ).toBe(true);
   });
 });

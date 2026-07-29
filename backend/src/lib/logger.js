@@ -4,19 +4,29 @@ import config from '../config.js';
 
 export const requestContext = new AsyncLocalStorage();
 
-const logger = pino({
-  level: config.logLevel,
-  mixin() {
-    const context = requestContext.getStore();
+export function createLogger(destination) {
+  const options = {
+    level: config.logLevel,
+    mixin() {
+      const context = requestContext.getStore();
 
-    return context?.requestId
-      ? { requestId: context.requestId }
-      : {};
-  },
-  transport:
-    config.nodeEnv === 'development'
-      ? { target: 'pino-pretty', options: { colorize: true } }
-      : undefined,
-});
+      return context?.requestId
+        ? { requestId: context.requestId }
+        : {};
+    },
+    ...(!destination && config.nodeEnv === 'development'
+      ? {
+          transport: {
+            target: 'pino-pretty',
+            options: { colorize: true },
+          },
+        }
+      : {}),
+  };
+
+  return pino(options, destination);
+}
+
+const logger = createLogger();
 
 export default logger;

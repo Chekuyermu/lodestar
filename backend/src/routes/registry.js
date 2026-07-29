@@ -64,18 +64,24 @@ function parsePositiveSafeInteger(value) {
 // Appends ttl_warning:true when the entry's estimated remaining TTL falls
 // below SERVICE_TTL_WARNING_LEDGERS. Omits the field entirely when currentLedger
 // is unavailable so callers can always treat absence as "no warning data".
-function annotateTtlWarning(service, currentLedger) {
-  if (
-    currentLedger === null ||
-    currentLedger === undefined ||
-    !Number.isFinite(Number(currentLedger))
-  ) {
-    return { ...service };
+function parseFiniteNumericValue(value) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
   }
 
-  const registeredAt = Number(service?.registered_at);
+  if (typeof value !== "string" || value.trim() === "") {
+    return null;
+  }
 
-  if (!Number.isFinite(registeredAt)) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function annotateTtlWarning(service, currentLedger) {
+  const parsedCurrentLedger = parseFiniteNumericValue(currentLedger);
+  const registeredAt = parseFiniteNumericValue(service?.registered_at);
+
+  if (parsedCurrentLedger === null || registeredAt === null) {
     return { ...service };
   }
 
@@ -84,7 +90,7 @@ function annotateTtlWarning(service, currentLedger) {
 
   return {
     ...service,
-    ttl_warning: Number(currentLedger) >= warningOnset,
+    ttl_warning: parsedCurrentLedger >= warningOnset,
   };
 }
 
