@@ -46,6 +46,8 @@ if (process.argv.includes("--print-config")) {
 
 validateConfig(logger);
 
+logger.info({ corsOrigin: config.corsOrigin }, "Resolved CORS origin allowlist");
+
 const app = express();
 
 // Trust the configured number of proxy hops so req.ip reflects the real client
