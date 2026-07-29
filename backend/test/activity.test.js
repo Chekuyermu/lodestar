@@ -95,7 +95,9 @@ describe('activity feed store', () => {
     const entry = { txHash: 'single-entry-hash', service: 'test-svc' };
     recordActivity(entry);
     const feed = getActivityFeed();
-    expect(feed[0]).toMatchObject(entry);
+    // The feed is a file-based persistent store; prior test entries may exist.
+    // Verify the most recently recorded entry (at index 0 via unshift) matches exactly.
+    expect(feed[0]).toEqual(entry);
   });
 
   it('truncation drops oldest entries and preserves newest', () => {

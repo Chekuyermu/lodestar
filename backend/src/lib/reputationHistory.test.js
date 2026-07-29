@@ -86,9 +86,12 @@ describe('reputationHistory', () => {
       }
 
       const history = getReputationHistory(1);
-      expect(history).toHaveLength(count);
-      // Newest (last recorded) is at index 0
-      expect(history[0].timestamp).toBe((count - 1) * 1000);
+      expect(history).toEqual(
+        Array.from({ length: count }, (_, index) => {
+          const i = count - 1 - index;
+          return { timestamp: i * 1000, delta: i, newValue: i * 2 };
+        }),
+      );
     });
   });
 });
