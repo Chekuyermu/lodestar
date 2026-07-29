@@ -41,6 +41,21 @@ const logger = pino({
   transport: { target: 'pino-pretty', options: { colorize: true } },
 });
 
+const FETCH_TIMEOUT_MS = Number.isFinite(Number(process.env.AGENT_FETCH_TIMEOUT_MS))
+  ? Math.max(1, Number(process.env.AGENT_FETCH_TIMEOUT_MS))
+  : 5000;
+
+async function fetchWithTimeout(resource, init = {}) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+  try {
+    return await fetch(resource, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 // ── Canonical event names ─────────────────────────────────────────────────────
 
 export const EVENT = {
@@ -62,7 +77,7 @@ let currentScore = null;
 
 export async function ensureRegistered() {
   try {
-    const res = await fetch(`${LODESTAR_API_URL}/api/agents/${AGENT_ADDRESS}`);
+    const res = await fetchWithTimeout(`${LODESTAR_API_URL}/api/agents/${AGENT_ADDRESS}`);
     if (res.status === 503) {
       logger.info(
         { event: EVENT.AGENT_REGISTERED, agentAddress: AGENT_ADDRESS, scoringEnabled: false },
@@ -89,7 +104,7 @@ export async function ensureRegistered() {
         { event: EVENT.AGENT_REGISTERED, agentAddress: AGENT_ADDRESS },
         'Not registered — registering now…'
       );
-      const regRes = await fetch(`${LODESTAR_API_URL}/api/agents/register`, {
+      const regRes = await fetchWithTimeout(`${LODESTAR_API_URL}/api/agents/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -127,7 +142,7 @@ export async function ensureRegistered() {
 
 async function checkSpend(amountUsdc, category) {
   try {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `${LODESTAR_API_URL}/api/agents/${AGENT_ADDRESS}/can-spend` +
       `?amount=${encodeURIComponent(amountUsdc)}&category=${encodeURIComponent(category)}`
     );
@@ -148,7 +163,7 @@ async function recordOutcome(amountUsdc, success, serviceId) {
         .update(body)
         .digest('hex');
     }
-    const res = await fetch(`${LODESTAR_API_URL}/api/agents/${AGENT_ADDRESS}/payment`, {
+    const res = await fetchWithTimeout(`${LODESTAR_API_URL}/api/agents/${AGENT_ADDRESS}/payment`, {
       method: 'POST',
       headers,
       body,
@@ -193,7 +208,7 @@ function buildHttpClient() {
 
   // Implement fetch manually — x402HTTPClient.fetch() was removed in this version
   httpClient.fetch = async (url, init = {}) => {
-    const probe = await fetch(url, init);
+    const probe = await fetchWithTimeout(url, init);
     if (probe.status !== 402) return probe;
 
     const paymentRequired = httpClient.getPaymentRequiredResponse(
@@ -203,7 +218,7 @@ function buildHttpClient() {
 
     const paymentPayload = await httpClient.createPaymentPayload(paymentRequired);
     const paymentHeaders = httpClient.encodePaymentSignatureHeader(paymentPayload);
-    return fetch(url, {
+    return fetchWithTimeout(url, {
       ...init,
       headers: { ...(init.headers ?? {}), ...paymentHeaders },
     });
@@ -215,7 +230,7 @@ function buildHttpClient() {
 // ── Registry helpers ──────────────────────────────────────────────────────────
 
 async function fetchServices(category) {
-  const res = await fetch(`${LODESTAR_API_URL}/api/services?category=${category}`);
+  const res = await fetchWithTimeout(`${LODESTAR_API_URL}/api/services?category=${category}`);
   if (!res.ok) throw new Error(`Registry fetch failed: ${res.status}`);
   const body = await res.json();
   return body.services ?? [];
@@ -223,7 +238,7 @@ async function fetchServices(category) {
 
 async function submitReputation(id, positive) {
   try {
-    const res = await fetch(`${LODESTAR_API_URL}/api/reputation/${id}`, {
+    const res = await fetchWithTimeout(`${LODESTAR_API_URL}/api/reputation/${id}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ positive, agent: AGENT_ADDRESS }),
@@ -336,7 +351,7 @@ export async function runTask(category, buildUrl, scoringEnabled, client = httpC
     const paymentHeaders = client.encodePaymentSignatureHeader(paymentPayload);
     let response;
     try {
-      response = await fetch(endpointUrl, { headers: paymentHeaders, keepalive: true });
+      response = await fetchWithTimeout(endpointUrl, { headers: paymentHeaders, keepalive: true });
     } catch (err) {
       logger.error(
         {
