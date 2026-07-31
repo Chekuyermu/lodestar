@@ -11,6 +11,7 @@ import {
   dumpPendingTransactions,
   resumePendingTransactions,
 } from "./lib/contract.js";
+import requestIdMiddleware from "./lib/requestId.js";
 import registryRouter from "./routes/registry.js";
 import servicesRouter from "./routes/services.js";
 import demoRouter from "./routes/demo.js";
@@ -56,6 +57,7 @@ const app = express();
 app.set("trust proxy", config.trustProxy);
 
 app.use(cors({ origin: config.corsOrigin, credentials: true }));
+app.use(requestIdMiddleware);
 app.use(express.json({ limit: config.jsonBodyLimit }));
 
 app.get("/healthz", async (_req, res) => {
@@ -106,10 +108,11 @@ app.use((err, _req, res, _next) => {
     });
   }
 
-  logger.error({ err }, "Unhandled error");
+  logger.error({ err, requestId: _req.requestId }, "Unhandled error");
   res.status(500).json({
     error: "Internal server error",
     code: "INTERNAL_ERROR",
+    requestId: _req.requestId,
   });
 });
 let server;
