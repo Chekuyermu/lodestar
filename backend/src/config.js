@@ -90,6 +90,8 @@ const config = Object.freeze({
 
   jsonBodyLimit: process.env.JSON_BODY_LIMIT ?? '100kb',
 
+  redisUrl: process.env.REDIS_URL,
+
   // Trust proxy setting for Express — required so rate limiting reads the real
   // client IP (X-Forwarded-For) when running behind a reverse proxy (e.g. Render).
   trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
