@@ -26,7 +26,7 @@ export function writeRateLimiter(
   let store;
   if (client) {
     store = new RedisStore({
-      sendCommand: (...args) => client.sendCommand(...args),
+      sendCommand: (command, ...args) => client.call(command, ...args),
     });
   }
   return rateLimit({
