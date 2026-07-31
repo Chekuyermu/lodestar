@@ -10,10 +10,43 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
+const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://lodestar.app';
+
 export const metadata: Metadata = {
-  title: 'Lodestar — Navigate the agent economy',
+  metadataBase: new URL(baseUrl),
+  title: {
+    default: 'Lodestar — Navigate the agent economy',
+    template: '%s | Lodestar',
+  },
   description:
     'The on-chain discovery layer that lets AI agents find, evaluate, and pay for x402 services on Stellar — autonomously.',
+  openGraph: {
+    type: 'website',
+    siteName: 'Lodestar',
+    title: 'Lodestar — Navigate the agent economy',
+    description:
+      'The on-chain discovery layer that lets AI agents find, evaluate, and pay for x402 services on Stellar — autonomously.',
+    url: baseUrl,
+    images: [
+      {
+        url: '/opengraph-image',
+        width: 1200,
+        height: 630,
+        alt: 'Lodestar — Navigate the agent economy',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Lodestar — Navigate the agent economy',
+    description:
+      'The on-chain discovery layer that lets AI agents find, evaluate, and pay for x402 services on Stellar — autonomously.',
+    images: ['/opengraph-image'],
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
