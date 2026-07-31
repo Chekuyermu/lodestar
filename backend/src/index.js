@@ -15,6 +15,7 @@ import {
   dumpPendingTransactions,
   resumePendingTransactions,
 } from "./lib/contract.js";
+import requestIdMiddleware from "./lib/requestId.js";
 import registryRouter from "./routes/registry.js";
 import servicesRouter from "./routes/services.js";
 import demoRouter from "./routes/demo.js";
@@ -50,6 +51,8 @@ if (process.argv.includes("--print-config")) {
 
 validateConfig(logger);
 
+logger.info({ corsOrigin: config.corsOrigin }, "Resolved CORS origin allowlist");
+
 const app = express();
 
 // Trust the configured number of proxy hops so req.ip reflects the real client
@@ -61,6 +64,7 @@ app.use(requestLogger);
 app.use(requestContextMiddleware);
 
 app.use(cors({ origin: config.corsOrigin, credentials: true }));
+app.use(requestIdMiddleware);
 app.use(express.json({ limit: config.jsonBodyLimit }));
 
 app.get("/healthz", async (req, res) => {
@@ -99,8 +103,21 @@ app.get("/healthz", async (req, res) => {
 
 app.use("/api", registryRouter);
 app.use("/api", agentsRouter);
-app.use("/api", demoRouter);
-app.use("/demo", servicesRouter);
+
+// Demo routes are backed by server-custodied keys and should not be reachable
+// in production deployments. Gate them behind ENABLE_DEMO_ROUTES, defaulting to
+// enabled only when NODE_ENV is not "production".
+const enableDemoRoutes =
+  process.env.ENABLE_DEMO_ROUTES === 'true' ||
+  (process.env.ENABLE_DEMO_ROUTES === undefined && config.nodeEnv !== 'production');
+
+if (enableDemoRoutes) {
+  logger.info({ nodeEnv: config.nodeEnv }, 'Demo routes enabled');
+  app.use("/api", demoRouter);
+  app.use("/demo", servicesRouter);
+} else {
+  logger.info({ nodeEnv: config.nodeEnv }, 'Demo routes disabled (set ENABLE_DEMO_ROUTES=true to enable)');
+}
 
 app.use((err, req, res, _next) => {
   if (err.type === "entity.too.large") {
@@ -111,10 +128,11 @@ app.use((err, req, res, _next) => {
     });
   }
 
-  req.log.error({ err }, "Unhandled error");
+
   res.status(500).json({
     error: "Internal server error",
     code: "INTERNAL_ERROR",
+    requestId: _req.requestId,
   });
 });
 let server;
