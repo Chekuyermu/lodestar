@@ -333,11 +333,11 @@ router.post("/registry/prepare-register", writeRateLimiter(), async (req, res) =
     if (!isValidStellarAddress(providerAddress)) {
       return res.status(400).json({ error: "`providerAddress` must be a valid Stellar address", code: "INVALID_BODY" });
     }
-    if (typeof name !== "string" || name.trim().length < 3 || name.trim().length > 50) {
-      return res.status(400).json({ error: "`name` must be 3-50 characters", code: "INVALID_BODY" });
+    if (typeof name !== "string" || name.trim().length < 3 || name.trim().length > 64) {
+      return res.status(400).json({ error: "`name` must be 3-64 characters", code: "INVALID_BODY" });
     }
-    if (typeof description !== "string" || description.trim().length < 10 || description.trim().length > 200) {
-      return res.status(400).json({ error: "`description` must be 10-200 characters", code: "INVALID_BODY" });
+    if (typeof description !== "string" || description.trim().length < 10 || description.trim().length > 256) {
+      return res.status(400).json({ error: "`description` must be 10-256 characters", code: "INVALID_BODY" });
     }
     if (typeof endpoint !== "string" || !endpoint.startsWith("https://")) {
       return res.status(400).json({ error: "`endpoint` must start with https://", code: "INVALID_BODY" });
