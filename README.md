@@ -94,7 +94,7 @@ Lodestar is a Soroban smart contract that acts as a neutral, on-chain registry. 
 ### Agent flow
 1. Call `list_services(category)` — returns active services sorted by reputation
 2. Pick the top result (highest reputation, lowest price, or newest)
-3. Make an HTTP request to the endpoint — receive a `402 Payment Required` response
+3. Make an HTTP request to the endpoint — receive a `402 Payment Required` response. For the search endpoint, the `q` query parameter is trimmed and normalized before forwarding. Queries longer than 256 characters are rejected with HTTP 400 `INVALID_QUERY`.
 4. Build and sign an x402 payment transaction on Stellar using the agent's keypair
 5. Retry the request with the payment header — receive the data
 6. Optionally call `update_reputation` to improve the service's score for future agents

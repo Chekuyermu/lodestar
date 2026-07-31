@@ -158,9 +158,20 @@ router.get('/weather', async (req, res) => {
 
 router.get('/search', async (req, res) => {
   try {
-    const q = req.query.q;
-    if (!q) {
+    const rawQuery = req.query.q;
+    if (!rawQuery) {
       return res.status(400).json({ error: 'Query parameter `q` is required', code: 'MISSING_QUERY' });
+    }
+
+    const sanitizedQ = String(rawQuery)
+      .trim()
+      .replace(/[\u0000-\u001F\u007F]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (sanitizedQ.length === 0 || sanitizedQ.length > 256) {
+      logger.warn({ rawQuery }, 'Invalid search query supplied to GET /demo/search');
+      return res.status(400).json({ error: 'Search query is invalid or too long', code: 'INVALID_QUERY' });
     }
 
     const response = await fetch(
@@ -171,7 +182,7 @@ router.get('/search', async (req, res) => {
           'Content-Type': 'application/json',
           'X-API-KEY': config.braveApiKey,
         },
-        body: JSON.stringify({ q, num: 5 }),
+        body: JSON.stringify({ q: sanitizedQ, num: 5 }),
       }
     );
 
@@ -205,9 +216,9 @@ router.get('/search', async (req, res) => {
       );
     }
 
-    logger.info({ q }, 'Search request fulfilled');
+    logger.info({ q: sanitizedQ }, 'Search request fulfilled');
     if (searchTxHash) res.setHeader('x-payment-transaction', searchTxHash);
-    res.json({ query: q, results });
+    res.json({ query: sanitizedQ, results });
   } catch (err) {
     logger.error({ err }, 'GET /demo/search failed');
     res.status(500).json({ error: 'Search failed', code: 'SEARCH_ERROR' });
