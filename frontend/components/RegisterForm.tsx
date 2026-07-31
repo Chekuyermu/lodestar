@@ -6,6 +6,8 @@ import { registerService, type RegisterFormData } from '@/lib/contract';
 
 const CATEGORIES: Category[] = ['search', 'weather', 'finance', 'ai', 'data', 'compute'];
 
+const PRICE_USDC_REGEX = /^(?:0|[1-9]\d*)(?:\.\d+)?$/;
+
 const EXPLORER_URL =
   process.env.NEXT_PUBLIC_EXPLORER_URL ?? 'https://stellar.expert/explorer/testnet';
 
@@ -31,15 +33,28 @@ const EMPTY: FormState = {
 
 function validate(f: FormState): Record<string, string> {
   const errors: Record<string, string> = {};
-  if (f.name.length < 3 || f.name.length > 50)
+  
+  const trimmedName = f.name.trim();
+  if (trimmedName.length < 3 || trimmedName.length > 50)
     errors.name = 'Name must be 3–50 characters';
-  if (f.description.length < 10 || f.description.length > 200)
+  
+  const trimmedDescription = f.description.trim();
+  if (trimmedDescription.length < 10 || trimmedDescription.length > 200)
     errors.description = 'Description must be 10–200 characters';
-  if (!f.endpoint.startsWith('https://'))
+  
+  const trimmedEndpoint = f.endpoint.trim();
+  if (!trimmedEndpoint.startsWith('https://'))
     errors.endpoint = 'Endpoint must start with https://';
-  const price = parseFloat(f.price_usdc);
-  if (isNaN(price) || price < 0.0001)
-    errors.price_usdc = 'Price must be at least 0.0001 USDC';
+  
+  const trimmedPrice = f.price_usdc.trim();
+  if (trimmedPrice.length === 0 || trimmedPrice !== f.price_usdc || !PRICE_USDC_REGEX.test(trimmedPrice)) {
+    errors.price_usdc = 'Invalid price format';
+  } else {
+    const price = parseFloat(trimmedPrice);
+    if (isNaN(price) || price < 0.0001)
+      errors.price_usdc = 'Price must be at least 0.0001 USDC';
+  }
+  
   return errors;
 }
 
@@ -52,7 +67,10 @@ export default function RegisterForm({ walletAddress }: Props) {
 
   function set(field: keyof FormState, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
-    setErrors((prev) => { const e = { ...prev }; delete e[field]; return e; });
+    // Validate on change
+    const updatedForm = { ...form, [field]: value };
+    const errs = validate(updatedForm);
+    setErrors(errs);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -180,7 +198,7 @@ export default function RegisterForm({ walletAddress }: Props) {
 
       <button
         type="submit"
-        disabled={submitting}
+        disabled={submitting || Object.keys(errors).length > 0}
         className="btn-primary w-full py-3 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {submitting ? 'Registering…' : 'Register Service'}
