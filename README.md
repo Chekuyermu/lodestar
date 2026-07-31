@@ -170,6 +170,8 @@ SEEDING_MODE=true node scripts/seed.js
 
 This registers the four demo services (weather, search, and two live Stellar services) into the on-chain registry.
 
+> **Seeded data caveat**: The demo seeding scripts (`scripts/demo/boost-scores.js`, `scripts/seed-agents.js`) programmatically inflate agent scores by submitting synthetic on-chain payments. This is intentional — without it the leaderboard would show every agent at score 100 and the demo would be uninteresting. These scripts are **demo-only** and must never be run against mainnet. The `boost-scores` script enforces this with a network passphrase guard.
+
 ### 5. Start backend
 
 ```sh
@@ -259,6 +261,15 @@ Copy the printed contract ID, add to `.env` as `AGENTS_CONTRACT_ID`, then:
 ```sh
 cd backend && npm run seed-agents
 ```
+
+To give the demo agents varied credit scores (so the leaderboard is not flat), run the optional demo boost script:
+
+```sh
+node scripts/demo/boost-scores.js --dry-run   # preview payments
+node scripts/demo/boost-scores.js             # submit them
+```
+
+> This script is **demo-only** and refuses to run against the Stellar mainnet passphrase.
 
 ---
 
