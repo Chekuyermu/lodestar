@@ -300,6 +300,35 @@ describe('runTask — payment_failed on fetch throw', () => {
     expect(call[0]).toMatchObject({ event: 'payment_failed', category: 'weather' });
     expect(call[0].err).toBeInstanceOf(Error);
   });
+
+  it('uses a timeout signal for fetches and recovers from a stalled endpoint', async () => {
+    const fetchSpy = vi.fn().mockImplementation((url, init = {}) => {
+      if (url.includes('/api/services')) {
+        return Promise.resolve(makeResponse({ json: () => Promise.resolve({ services: [MOCK_SERVICE] }) }));
+      }
+      if (url.includes('/can-spend')) {
+        return Promise.resolve(makeResponse({ json: () => Promise.resolve({ allowed: true, reason: 'OK' }) }));
+      }
+      if (url.includes('/payment')) {
+        return Promise.resolve(makeResponse({ json: () => Promise.resolve({ newScore: 110 }) }));
+      }
+      if (url.includes('/reputation')) {
+        return Promise.resolve(makeResponse());
+      }
+      if (init?.signal?.aborted) {
+        return Promise.reject(new DOMException('The operation was aborted.', 'AbortError'));
+      }
+      return Promise.reject(new Error('stalled'));
+    });
+    global.fetch = fetchSpy;
+
+    const result = await runTask('weather', (ep) => ep, false, mockHttpClient);
+
+    expect(result).toEqual({ success: false, priceUsdc: null });
+    expect(fetchSpy).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    const paymentFailedCall = logError.mock.calls.find(([f]) => f?.event === EVENT.PAYMENT_FAILED);
+    expect(paymentFailedCall).toBeDefined();
+  });
 });
 
 describe('main — agent_complete summary', () => {
