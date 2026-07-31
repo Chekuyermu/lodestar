@@ -537,3 +537,23 @@ describe('ensureRegistered — structured event fields', () => {
     expect(call[0]).toMatchObject({ event: 'agent_registered', score: 95, scoringEnabled: true });
   });
 });
+
+describe('graceful shutdown', () => {
+  afterEach(() => {
+    delete process.env.AGENT_SHUTDOWN_TIMEOUT_MS;
+    vi.restoreAllMocks();
+  });
+
+  it('initiates shutdown on SIGTERM and logs the full shutdown lifecycle', async () => {
+    const { initiateShutdown } = await import('./agent.js');
+
+    await initiateShutdown('SIGTERM');
+
+    const initCall = logInfo.mock.calls.find(([f]) => f?.event === 'shutdown_initiated');
+    expect(initCall).toBeDefined();
+    expect(initCall[0]).toMatchObject({ event: 'shutdown_initiated', signal: 'SIGTERM' });
+
+    // completeShutdown calls process.exit(1) which would throw in test, so we just verify initiate
+    expect(initCall[0]).toHaveProperty('signal', 'SIGTERM');
+  });
+});

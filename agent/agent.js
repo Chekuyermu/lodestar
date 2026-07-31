@@ -454,6 +454,50 @@ export async function runTask(category, buildUrl, scoringEnabled, client = httpC
   return { success: false, priceUsdc: null };
 }
 
+// ── Shutdown state ─────────────────────────────────────────────────────────────
+
+let shuttingDown = false;
+const SHUTDOWN_TIMEOUT_MS = parseInt(process.env.AGENT_SHUTDOWN_TIMEOUT_MS ?? '30000', 10);
+let shutdownTimer = null;
+
+export async function initiateShutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
+  logger.info(
+    { event: 'shutdown_initiated', signal },
+    `Graceful shutdown initiated (${signal}) — no new work will be started`
+  );
+
+  shutdownTimer = setTimeout(() => {
+    const pendingCount = getPendingTransactionCount ? getPendingTransactionCount() : 0;
+    logger.warn(
+      { event: 'shutdown_timeout', pendingTransactions: pendingCount },
+      `Shutdown timeout reached after ${SHUTDOWN_TIMEOUT_MS}ms — exiting`
+    );
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT_MS);
+  shutdownTimer.unref();
+}
+
+async function completeShutdown(success, unresolved) {
+  if (shutdownTimer) clearTimeout(shutdownTimer);
+
+  const finalScore = currentScore;
+  logger.info(
+    {
+      event: 'shutdown_complete',
+      success,
+      unresolvedPayments: unresolved,
+      finalScore,
+    },
+    'Agent shutdown complete'
+  );
+
+  dispose();
+  process.exit(success ? 0 : 1);
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export async function main() {
@@ -474,14 +518,24 @@ export async function main() {
   let successCount = 0;
   let failCount = 0;
   let totalUsdcSpent = 0;
+  const unresolvedPayments = [];
 
   for (const { category, buildUrl } of tasks) {
+    if (shuttingDown) {
+      logger.warn({ event: 'shutdown_skip_task', category }, 'Skipping task due to shutdown');
+      failCount++;
+      continue;
+    }
+
     const result = await runTask(category, buildUrl, scoringEnabled, httpClient);
     if (result.success) {
       successCount++;
       totalUsdcSpent += parseFloat(result.priceUsdc ?? '0');
     } else {
       failCount++;
+      if (result._unresolved) {
+        unresolvedPayments.push({ category, serviceId: result._unresolved.serviceId, priceUsdc: result.priceUsdc });
+      }
     }
   }
 
@@ -491,6 +545,8 @@ export async function main() {
     finalScore !== null && scoreAfterRegistration !== null
       ? finalScore - scoreAfterRegistration
       : null;
+
+  const shutdownSuccess = failCount === 0 && !shuttingDown;
 
   logger.info(
     {
@@ -503,16 +559,25 @@ export async function main() {
       finalScore,
       scoreDelta,
       runDurationMs,
+      shutdownInitiated: shuttingDown,
     },
     'Agent run complete'
   );
+
+  if (shuttingDown) {
+    await completeShutdown(shutdownSuccess, unresolvedPayments);
+  }
 }
 
 // ── Entry point guard ─────────────────────────────────────────────────────────
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  process.on('SIGTERM', () => { dispose(); process.exit(0); });
-  process.on('SIGINT',  () => { dispose(); process.exit(0); });
+  process.on('SIGTERM', async () => {
+    await initiateShutdown('SIGTERM');
+  });
+  process.on('SIGINT', async () => {
+    await initiateShutdown('SIGINT');
+  });
   main().catch((err) => {
     logger.error({ err }, 'Agent crashed');
     process.exit(1);
