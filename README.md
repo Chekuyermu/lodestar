@@ -3,6 +3,8 @@
 
 Lodestar solves the missing discovery layer in the x402 agentic payments ecosystem on Stellar — today AI agents can pay for services but cannot find them autonomously because every service URL is hardcoded by a human, so Lodestar ships two Soroban smart contracts: the first is a permanent neutral on-chain registry where any service provider registers their x402 endpoint once with a price and category and it becomes discoverable forever, and the second tracks every AI agent's on-chain identity giving each agent a credit score from 0 to 1000 that rises with successful payments and falls with failures, enforces programmable per-transaction and daily spending limits at the contract level, and allows service providers to gate access to premium services by minimum score — all of this is exposed through an Express backend with real x402-protected demo endpoints for weather and search, a Next.js frontend where providers can register services and agents can view their scores, and a standalone autonomous agent script that starts with zero hardcoded URLs, queries the registry, discovers the best service by reputation, pays via USDC on Stellar testnet through the x402 protocol, receives real data back, and updates its own credit score on-chain — making Lodestar the complete infrastructure layer for the agentic economy covering discovery, payment, and trust in a single production-grade open source project that directly addresses all three requirements the Stellar Hacks judges explicitly called out in the hackathon brief.
 
+If you are new to x402, start with the [x402 primer](docs/x402-primer.md) for a simple explanation of the 402 challenge, the payment headers, the facilitator role, and how Stellar settlement fits into the flow.
+
 ---
 
 ## Project Status and Roadmap
@@ -37,7 +39,7 @@ Lodestar ships two Soroban contracts: the **Service Registry** (discovery + repu
 
 ## The Problem
 
-AI agents can already pay for services via the x402 protocol on Stellar. But they cannot find services on their own — every URL is hardcoded by a human. This breaks the promise of autonomous agents: if a developer has to manually wire every service endpoint into every agent, you haven't built autonomy, you've built a very expensive API client.
+AI agents can already pay for services via the x402 protocol on Stellar. But they cannot find services on their own — every URL is hardcoded by a human. This breaks the promise of autonomous agents: if a developer has to manually wire every service endpoint into every agent, you haven't built autonomy, you've built a very expensive API client. For a beginner-friendly explanation of the flow, see the [x402 primer](docs/x402-primer.md).
 
 ## The Solution
 
