@@ -254,6 +254,50 @@ impl LodestarRegistry {
         services
     }
 
+    /// List a single page of services in registration order, filtering only active services.
+    /// This avoids the pagination bug where inactive services cause short pages.
+    /// 
+    /// Unlike list_services, this function ensures that every page except the last
+    /// contains exactly page_size entries when enough active services exist.
+    pub fn list_services_page(env: Env, page: u32, page_size: u32) -> Vec<ServiceEntry> {
+        let page_size = page_size.min(20u32).max(1u32);
+        
+        let ids: Vec<u64> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::ServiceIds)
+            .unwrap_or_else(|| vec![&env]);
+
+        let mut result: Vec<ServiceEntry> = vec![&env];
+        let total_ids = ids.len() as usize;
+        let mut active_count = 0;
+        let mut found_count = 0;
+        let target_skip = page as usize * page_size as usize;
+
+        // Walk through all services, counting active ones until we reach our page
+        for i in 0..total_ids {
+            if let Some(entry) = env
+                .storage()
+                .persistent()
+                .get::<DataKey, ServiceEntry>(&DataKey::Service(ids.get(i as u32).unwrap()))
+            {
+                if entry.active {
+                    if active_count >= target_skip {
+                        // We're in the target page range
+                        result.push_back(entry);
+                        found_count += 1;
+                        if found_count >= page_size as usize {
+                            break;
+                        }
+                    }
+                    active_count += 1;
+                }
+            }
+        }
+
+        result
+    }
+
     /// Cast a reputation vote on a service.
     ///
     /// Authorization (closes the anonymous-write vulnerability):
@@ -604,6 +648,128 @@ mod test {
                 Some(String::from_str(&env, "nonexistent")),
             );
             assert_eq!(result.len(), 0);
+        });
+    }
+
+    #[test]
+    fn test_list_services_page_basic() {
+        let env = Env::default();
+        let contract_id = env.register(LodestarRegistry, (Address::generate(&env),));
+
+        env.clone().as_contract(&contract_id, || {
+            let provider = Address::generate(&env);
+            
+            // Register 5 active services
+            for i in 1..=5 {
+                setup_service(&env, i, &provider, "compute", 0, true);
+            }
+
+            // Test first page with page_size=3
+            let page0 = LodestarRegistry::list_services_page(env.clone(), 0, 3);
+            assert_eq!(page0.len(), 3);
+            assert_eq!(page0.get(0).unwrap().id, 1);
+            assert_eq!(page0.get(1).unwrap().id, 2);
+            assert_eq!(page0.get(2).unwrap().id, 3);
+
+            // Test second page with page_size=3
+            let page1 = LodestarRegistry::list_services_page(env.clone(), 1, 3);
+            assert_eq!(page1.len(), 2); // Only 2 remaining services
+            assert_eq!(page1.get(0).unwrap().id, 4);
+            assert_eq!(page1.get(1).unwrap().id, 5);
+
+            // Test beyond available pages
+            let page2 = LodestarRegistry::list_services_page(env, 2, 3);
+            assert_eq!(page2.len(), 0);
+        });
+    }
+
+    #[test]
+    fn test_list_services_page_mixed_active_inactive() {
+        let env = Env::default();
+        let contract_id = env.register(LodestarRegistry, (Address::generate(&env),));
+
+        env.clone().as_contract(&contract_id, || {
+            let provider = Address::generate(&env);
+            
+            // Register services with alternating active/inactive pattern
+            // IDs 1,3,5,7,9 are active; IDs 2,4,6,8,10 are inactive
+            for i in 1..=10 {
+                let active = i % 2 == 1; // odd IDs are active
+                setup_service(&env, i, &provider, "compute", 0, active);
+            }
+
+            // Test first page with page_size=3
+            // Should get services 1, 3, 5 (first 3 active services)
+            let page0 = LodestarRegistry::list_services_page(env.clone(), 0, 3);
+            assert_eq!(page0.len(), 3);
+            assert_eq!(page0.get(0).unwrap().id, 1);
+            assert_eq!(page0.get(1).unwrap().id, 3);
+            assert_eq!(page0.get(2).unwrap().id, 5);
+
+            // Test second page with page_size=3
+            // Should get services 7, 9 (next 2 active services, only 2 remaining)
+            let page1 = LodestarRegistry::list_services_page(env.clone(), 1, 3);
+            assert_eq!(page1.len(), 2);
+            assert_eq!(page1.get(0).unwrap().id, 7);
+            assert_eq!(page1.get(1).unwrap().id, 9);
+
+            // Test third page - should be empty
+            let page2 = LodestarRegistry::list_services_page(env, 2, 3);
+            assert_eq!(page2.len(), 0);
+        });
+    }
+
+    #[test]
+    fn test_list_services_page_all_inactive() {
+        let env = Env::default();
+        let contract_id = env.register(LodestarRegistry, (Address::generate(&env),));
+
+        env.clone().as_contract(&contract_id, || {
+            let provider = Address::generate(&env);
+            
+            // Register 3 inactive services
+            for i in 1..=3 {
+                setup_service(&env, i, &provider, "compute", 0, false);
+            }
+
+            // Test first page - should be empty since all services are inactive
+            let page0 = LodestarRegistry::list_services_page(env, 0, 3);
+            assert_eq!(page0.len(), 0);
+        });
+    }
+
+    #[test]
+    fn test_list_services_page_empty_registry() {
+        let env = Env::default();
+        let contract_id = env.register(LodestarRegistry, (Address::generate(&env),));
+
+        env.clone().as_contract(&contract_id, || {
+            // Test with no services registered
+            let page0 = LodestarRegistry::list_services_page(env, 0, 3);
+            assert_eq!(page0.len(), 0);
+        });
+    }
+
+    #[test]
+    fn test_list_services_page_parameter_bounds() {
+        let env = Env::default();
+        let contract_id = env.register(LodestarRegistry, (Address::generate(&env),));
+
+        env.clone().as_contract(&contract_id, || {
+            let provider = Address::generate(&env);
+            
+            // Register 5 active services
+            for i in 1..=5 {
+                setup_service(&env, i, &provider, "compute", 0, true);
+            }
+
+            // Test page_size clamping - should clamp 25 to 20
+            let result = LodestarRegistry::list_services_page(env.clone(), 0, 25);
+            assert_eq!(result.len(), 5); // All available services
+
+            // Test page_size clamping - should clamp 0 to 1
+            let result = LodestarRegistry::list_services_page(env, 0, 0);
+            assert_eq!(result.len(), 1); // One service due to min clamp
         });
     }
 
