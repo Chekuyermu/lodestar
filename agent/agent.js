@@ -9,6 +9,7 @@ import { x402Client, x402HTTPClient } from '@x402/core/client';
 import { createEd25519Signer } from '@x402/stellar';
 import { ExactStellarScheme } from '@x402/stellar/exact/client';
 import { buildRunSummary, writeRunSummary } from './runSummary.js';
+import { stroopsToUsdcDisplay } from '../packages/stroops/index.js';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -137,7 +138,7 @@ export async function ensureRegistered() {
       currentScore = agent.score;
       const policy = data.policy;
       const dailyLimitUsdc = policy
-        ? (Number(BigInt(policy.max_per_day_stroops)) / 10_000_000).toFixed(2)
+        ? stroopsToUsdcDisplay(policy.max_per_day_stroops)
         : null;
       logger.info(
         { event: EVENT.AGENT_REGISTERED, agentAddress: AGENT_ADDRESS, score: agent.score, dailyLimitUsdc, scoringEnabled: true },
@@ -236,15 +237,9 @@ export function dispose() {
   logger.info('Shutting down Lodestar Agent');
 }
 
-const STROOPS_PER_USDC = 10_000_000;
-
-function stroopsToUsdcStr(stroops) {
-  return String(Number(stroops) / STROOPS_PER_USDC);
-}
-
-function usdcStrToStroops(usdcStr) {
-  return BigInt(Math.round(parseFloat(usdcStr) * STROOPS_PER_USDC));
-}
+// USDC <-> stroop conversion comes from the shared package so the agent and
+// the backend cannot disagree on rounding (#853). The previous local copies
+// used floating-point math and were removed.
 
 function buildHttpClient() {
   // Re-read the secret for the x402 signer since the module-level reference
